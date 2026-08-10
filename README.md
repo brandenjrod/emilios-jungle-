@@ -44,6 +44,23 @@ Vercel will redeploy automatically if it's already connected to this repo. Your 
 { days: 21, label: "3 weeks", emoji: "🐒", title: "Emilio's 3 weeks old!!", text: "He's ready for tummy time! ..." },
 ```
 
+## Applying this update to an existing deployment
+
+You've already got the tables from before, so just run the small migration below rather than the full `schema.sql` (which now has these fields baked in for anyone starting fresh). It's safe to run regardless of what's already there:
+
+```sql
+alter table appointments add column if not exists appointment_time time;
+alter table growth_logs add column if not exists weight_oz numeric;
+
+do $$ begin
+  if not exists (select 1 from pg_policies where tablename = 'photos' and policyname = 'Allow update for all') then
+    create policy "Allow update for all" on photos for update using (true) with check (true);
+  end if;
+end $$;
+```
+
+(Also in `supabase/schema-add-time-oz-caption.sql` if you'd rather open the file than copy from here.)
+
 ## Local development (optional)
 
 ```
