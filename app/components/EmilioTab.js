@@ -7,18 +7,33 @@ import { formatAge, ageBreakdown, MILESTONES, currentMilestone, nextMilestone } 
 import { toDateInput } from "../../lib/format";
 
 function normalizeAppt(row) {
-  return { id: row.id, date: row.appointment_date, note: row.note };
+  return { id: row.id, date: row.appointment_date, time: row.appointment_time, note: row.note };
 }
 function normalizeGrowth(row) {
-  return { id: row.id, date: row.log_date, height: row.height_in, weight: row.weight_lb };
+  return { id: row.id, date: row.log_date, height: row.height_in, weightLb: row.weight_lb, weightOz: row.weight_oz };
+}
+
+function formatApptTime(time) {
+  if (!time) return null;
+  const [h, m] = time.split(":").map(Number);
+  const d = new Date();
+  d.setHours(h, m, 0, 0);
+  return d.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+}
+
+function formatWeight(lb, oz) {
+  const parts = [];
+  if (lb) parts.push(`${lb} lb`);
+  if (oz) parts.push(`${oz} oz`);
+  return parts.length ? parts.join(" ") : "—";
 }
 
 export function EmilioTab() {
   const [now, setNow] = useState(new Date());
   const [appointments, setAppointments] = useState([]);
   const [growthLogs, setGrowthLogs] = useState([]);
-  const [apptForm, setApptForm] = useState({ date: toDateInput(Date.now()), note: "" });
-  const [growthForm, setGrowthForm] = useState({ date: toDateInput(Date.now()), height: "", weight: "" });
+  const [apptForm, setApptForm] = useState({ date: toDateInput(Date.now()), time: "", note: "" });
+  const [growthForm, setGrowthForm] = useState({ date: toDateInput(Date.now()), height: "", weightLb: "", weightOz: "" });
   const [showAllMilestones, setShowAllMilestones] = useState(false);
 
   useEffect(() => {
@@ -58,8 +73,10 @@ export function EmilioTab() {
 
   const addAppointment = useCallback(async () => {
     if (!apptForm.note.trim()) return;
-    const { error } = await supabase.from("appointments").insert([{ appointment_date: apptForm.date, note: apptForm.note.trim() }]);
-    if (!error) setApptForm({ date: toDateInput(Date.now()), note: "" });
+    const { error } = await supabase
+      .from("appointments")
+      .insert([{ appointment_date: apptForm.date, appointment_time: apptForm.time || null, note: apptForm.note.trim() }]);
+    if (!error) setApptForm({ date: toDateInput(Date.now()), time: "", note: "" });
   }, [apptForm]);
 
   const deleteAppointment = useCallback(async (id) => {
@@ -67,15 +84,16 @@ export function EmilioTab() {
   }, []);
 
   const addGrowth = useCallback(async () => {
-    if (!growthForm.height && !growthForm.weight) return;
+    if (!growthForm.height && !growthForm.weightLb && !growthForm.weightOz) return;
     const { error } = await supabase.from("growth_logs").insert([
       {
         log_date: growthForm.date,
         height_in: growthForm.height ? parseFloat(growthForm.height) : null,
-        weight_lb: growthForm.weight ? parseFloat(growthForm.weight) : null,
+        weight_lb: growthForm.weightLb ? parseFloat(growthForm.weightLb) : null,
+        weight_oz: growthForm.weightOz ? parseFloat(growthForm.weightOz) : null,
       },
     ]);
-    if (!error) setGrowthForm({ date: toDateInput(Date.now()), height: "", weight: "" });
+    if (!error) setGrowthForm({ date: toDateInput(Date.now()), height: "", weightLb: "", weightOz: "" });
   }, [growthForm]);
 
   const deleteGrowth = useCallback(async (id) => {
@@ -143,6 +161,7 @@ export function EmilioTab() {
       <div style={{ background: C.cream, border: `2px solid ${C.creamBorder}`, borderRadius: "20px 20px 20px 8px", padding: 14, marginBottom: 14 }}>
         <div style={{ display: "flex", gap: 8, marginBottom: 10, flexWrap: "wrap" }}>
           <input type="date" value={apptForm.date} onChange={(e) => setApptForm((f) => ({ ...f, date: e.target.value }))} style={inputStyle(110)} />
+          <input type="time" value={apptForm.time} onChange={(e) => setApptForm((f) => ({ ...f, time: e.target.value }))} style={inputStyle(90)} />
           <input type="text" placeholder="Note (e.g. 2-week checkup)" value={apptForm.note} onChange={(e) => setApptForm((f) => ({ ...f, note: e.target.value }))} style={{ ...inputStyle(140), flex: 1 }} />
           <button onClick={addAppointment} className="tap-btn" style={addBtnStyle}>Add</button>
         </div>
@@ -152,7 +171,10 @@ export function EmilioTab() {
           <Table
             columns={["Date", "Note", ""]}
             rows={appointments.map((a) => [
-              new Date(a.date + "T00:00:00").toLocaleDateString([], { month: "short", day: "numeric", year: "numeric" }),
+              <>
+                {new Date(a.date + "T00:00:00").toLocaleDateString([], { month: "short", day: "numeric", year: "numeric" })}
+                {a.time && <div style={{ fontSize: 11, color: C.textDim, fontWeight: 600 }}>{formatApptTime(a.time)}</div>}
+              </>,
               a.note,
               <DeleteBtn key={a.id} onClick={() => deleteAppointment(a.id)} />,
             ])}
@@ -166,7 +188,8 @@ export function EmilioTab() {
         <div style={{ display: "flex", gap: 8, marginBottom: 10, flexWrap: "wrap" }}>
           <input type="date" value={growthForm.date} onChange={(e) => setGrowthForm((f) => ({ ...f, date: e.target.value }))} style={inputStyle(110)} />
           <input type="number" inputMode="decimal" placeholder="Height (in)" value={growthForm.height} onChange={(e) => setGrowthForm((f) => ({ ...f, height: e.target.value }))} style={inputStyle(90)} />
-          <input type="number" inputMode="decimal" placeholder="Weight (lb)" value={growthForm.weight} onChange={(e) => setGrowthForm((f) => ({ ...f, weight: e.target.value }))} style={inputStyle(90)} />
+          <input type="number" inputMode="decimal" placeholder="Weight (lb)" value={growthForm.weightLb} onChange={(e) => setGrowthForm((f) => ({ ...f, weightLb: e.target.value }))} style={inputStyle(80)} />
+          <input type="number" inputMode="decimal" placeholder="oz" min="0" max="15" value={growthForm.weightOz} onChange={(e) => setGrowthForm((f) => ({ ...f, weightOz: e.target.value }))} style={inputStyle(60)} />
           <button onClick={addGrowth} className="tap-btn" style={addBtnStyle}>Add</button>
         </div>
         {growthLogs.length === 0 ? (
@@ -177,7 +200,7 @@ export function EmilioTab() {
             rows={growthLogs.map((g) => [
               new Date(g.date + "T00:00:00").toLocaleDateString([], { month: "short", day: "numeric", year: "numeric" }),
               g.height ? `${g.height} in` : "—",
-              g.weight ? `${g.weight} lb` : "—",
+              formatWeight(g.weightLb, g.weightOz),
               <DeleteBtn key={g.id} onClick={() => deleteGrowth(g.id)} />,
             ])}
           />

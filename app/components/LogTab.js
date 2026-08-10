@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { C } from "../../lib/theme";
-import { formatTime, dateLabel, toDatetimeLocal } from "../../lib/format";
+import { formatTime, dateLabel, toDatetimeLocal, fromDatetimeLocal } from "../../lib/format";
 
 function entryMeta(entry) {
   return entry.type === "wet"
@@ -51,7 +51,7 @@ function LogTable({ items, onDelete, onUpdateTime }) {
   };
 
   const saveEdit = (id) => {
-    const ms = new Date(draftTime).getTime();
+    const ms = fromDatetimeLocal(draftTime);
     if (!isNaN(ms)) onUpdateTime(id, ms);
     setEditingId(null);
   };
