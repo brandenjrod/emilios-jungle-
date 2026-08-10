@@ -111,8 +111,18 @@ export default function App() {
   }, []);
 
   const updateEntryTime = useCallback(async (id, timestampMs) => {
+    // Update the UI immediately rather than waiting on the realtime
+    // round-trip, which was making edits look like they didn't take.
+    setEntries((prev) =>
+      prev.map((e) => (e.id === id ? { ...e, timestamp: timestampMs } : e)).sort((a, b) => b.timestamp - a.timestamp)
+    );
     const { error } = await supabase.from("entries").update({ created_at: new Date(timestampMs).toISOString() }).eq("id", id);
-    if (error) console.error("Update failed", error);
+    if (error) {
+      console.error("Update failed", error);
+      // Re-sync from the server if the save didn't actually go through.
+      const { data } = await supabase.from("entries").select("*").order("created_at", { ascending: false }).limit(500);
+      if (data) setEntries(data.map(normalize));
+    }
   }, []);
 
   if (!loaded) {
